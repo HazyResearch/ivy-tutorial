@@ -30,10 +30,10 @@ Citation:
   ```
   - Under the repo directory, install dependencies using the following command:
   ```
-    pip install -r requirements.txt
+  pip install -r requirements.txt
   ```
   - Open and run the notebook ivy-intro-tutorial.ipynb!
   ```
-  	jupyter notebook
+  jupyter notebook
   ```
 
