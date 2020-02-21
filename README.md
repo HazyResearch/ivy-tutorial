@@ -17,9 +17,9 @@ Citation:
 ```
 
 ## How to run:
-  - We recommend creating and using a conda environment in order to set up the tuotiral properly:
+  - We recommend creating and using a conda environment in order to set up the tutorial properly:
   ```
-  # create a conda environment called ivy-tutorial with python 3.6 dependency
+  # create a conda environment called ivy-tutorial with Python 3.6 dependency
   conda create --name ivy-tutorial python=3.6
 
   # activate the ivy-tutorial conda environment
