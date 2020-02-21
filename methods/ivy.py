@@ -1,6 +1,6 @@
 import numpy as np
 from utils.constant import NEGATIVE, POSITIVE
-from utils.utils import mean_to_cannonical
+from utils.utils import mean_to_canonical
 import networkx as nx
 from collections import Counter
 from sklearn.linear_model import LinearRegression, LogisticRegression
@@ -205,12 +205,12 @@ class Ivy:
             mean_parameter = np.copy(sem_aug)
             np.fill_diagonal(mean_parameter,fem_aug)
 
-            self.im, self.theta = mean_to_cannonical(deps,mean_parameter,maxiter=100,alpha=0.2)
+            self.im, self.theta = mean_to_canonical(deps,mean_parameter,maxiter=100,alpha=0.2)
 
             # update class balance
             self.class_balance_im = self.im.infer.query([str(p)],show_progress=False).normalize(inplace=False).values
 
-            # use cannonical parameters
+            # use canonical parameters
             self.im.infer.calibrate()
             self.im.infer.get_cliques()
             factor_dict = self.im.infer.get_clique_beliefs()
@@ -320,7 +320,7 @@ class Ivy:
                 np.log(self.class_balance[1])-np.log(self.class_balance[0]))
 
             if self.use_canonical:
-                # use cannonical parameters
+                # use canonical parameters
                 pos_posterior = np.zeros(n)
                 neg_posterior = np.zeros(n)
                 for clique in self.prob_dict:

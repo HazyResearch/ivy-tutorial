@@ -62,8 +62,7 @@ class IsingModel:
         return mom_matrix
 
 # manually comment out a version of pgmpy in order to get rid of the multiple progress bar    
-def mean_to_cannonical(deps, mean_parameter, theta=None, alpha=0.1, maxiter=20, accelerated=True):
-
+def mean_to_canonical(deps, mean_parameter, theta=None, alpha=0.1, maxiter=20, accelerated=True, verbose=False):
     # initialization
     p = mean_parameter.shape[0]
 
@@ -75,13 +74,6 @@ def mean_to_cannonical(deps, mean_parameter, theta=None, alpha=0.1, maxiter=20, 
         theta = theta.reset_index(drop=True)
         theta["j"] = theta["j"].astype(int)
         theta["k"] = theta["k"].astype(int)
-
-        # theta = pd.concat([pd.DataFrame([[x,x,0] for x in range(p)],columns=["j","k","value"]),
-        # pd.DataFrame([[int(x[0]),int(x[1]),1.0] for x in deps],columns=["j","k","value"]),
-        # pd.DataFrame([[x,p-1,1.0] for x in range(p-1)],columns=["j","k","value"])],axis=0)
-        # theta = theta.reset_index(drop=True)
-        # theta["j"] = theta["j"].astype(int)
-        # theta["k"] = theta["k"].astype(int)
 
     deps_aug = [(str(int(row["j"])),str(int(row["k"]))) for _, row in theta.iterrows()]
 
@@ -98,7 +90,7 @@ def mean_to_cannonical(deps, mean_parameter, theta=None, alpha=0.1, maxiter=20, 
     theta_list = []
     while True:
 
-        # intilaize an Ising model
+        # intialize an Ising model
         im = IsingModel(theta)
 
         # gradient
@@ -119,12 +111,12 @@ def mean_to_cannonical(deps, mean_parameter, theta=None, alpha=0.1, maxiter=20, 
             if accelerated:
                 theta["value"] = theta_list[1]["value"] + (itr-2)/(itr-1) * (theta_list[1]["value"] - theta_list[0]["value"])
 
-        if itr % 50 == 0:
-            print("Error: "+str(error))
+        if itr % 50 == 0 and verbose:
+            print("Error:", error)
         itr = itr+1
         
-        # stasify stopping criteria?
-        if (error < error_thresh) or (itr == maxiter):
+        # satisfy stopping criteria?
+        if error < error_thresh or itr == maxiter:
             break
 
     return im, theta
