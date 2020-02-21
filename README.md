@@ -1,10 +1,9 @@
-# ivy-tutorial
+# Ivy-tutorial
 
 This tutorial introduces the instrumental variable synthesis (Ivy) framework proposed in 
 
 [Ivy: Instrumental Variable Synthesis for Causal Inference](https://arxiv.org/abs/1803.01422) 
 (AISTATS 2020)
-
 
 Citation:
 ```
@@ -32,8 +31,7 @@ Citation:
   ```
   pip install -r requirements.txt
   ```
-  - Open and run the notebook ivy-intro-tutorial.ipynb!
+  - Open and run the notebook `ivy-intro-tutorial.ipynb`!
   ```
   jupyter notebook
   ```
-
