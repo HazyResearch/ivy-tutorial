@@ -4,7 +4,6 @@ from joblib import Parallel, delayed
 from sklearn import preprocessing
 from tqdm import tqdm
 from methods.ivy import Ivy
-from estimators.wald_estimator import WaldEstimatorStats
 
 def ComputeCausalitySingle(
     X, 
@@ -18,10 +17,8 @@ def ComputeCausalitySingle(
     Z_true=None,
     deps = [],
     random_seed = None,
-    chrome_id_list = [],
-    anchor = None,
-    use_canonical=False,
-    use_forward=False,
+    use_canonical=True,
+    use_forward=True,
     return_predictive_score=False):
 
     if random_seed is not None:
@@ -51,28 +48,19 @@ def ComputeCausalitySingle(
     causality_list = []
     for estimator in estimator_list:
 
-        # if estimator.__name__ in ["MedianWaldEstimator", "WeightedMedianWaldEstimator"]:
-        #     causality = estimator(X_test, Y[test_index], IVs_test, mode=mode)
-        #     # update causality_list
-        #     if isinstance(causality,list):
-        #         causality_list.extend(causality)
-        #     else:
-        #         causality_list.append(causality)
-        #     continue
-
         for IV_Model in IV_Model_list:
 
             # train the IV_model
             iv_model = IV_Model()
-            iv_model.train(IVs_train,X_train,deps=deps,anchor=anchor,
-            chrome_id_list=chrome_id_list,lr=1e-4,n_epochs=10000,log_train_every=20000,
-            verbose=False,use_canonical=use_canonical,use_forward=use_forward)
+            iv_model.train(IVs_train,X_train,deps=deps,
+            lr=1e-4,n_epochs=10000,log_train_every=20000,
+            verbose=False,use_canonical=use_canonical,
+            use_forward=use_forward)
 
             # compute synthesized IV on IVs_test
             if is_soft_label is True:
                 # for Ivy, when X is continuous, use ad-hoc score for synthesis
-                if (IV_Model.__name__ in ["Ivy","IvyMetal","IvyMultiple"]) and \
-                    (mode is "cxby"):
+                if (IV_Model.__name__ in ["Ivy"]) and (mode is "cxby"):
                     Z_test = iv_model.predict_proba(IVs_test,is_ad_hoc=True)
                 elif IV_Model.__name__ is "ObservationalAssociation":
                     Z_test = iv_model.predict_proba(IVs_test,X_test)
@@ -83,28 +71,12 @@ def ComputeCausalitySingle(
                 Z_test = iv_model.predict(IVs_test)
             
             # compute Wald estimator
-            if estimator.__name__ in ["WeightedMedianWaldEstimator"]:
-                if type(iv_model).__name__ is "WeightedMajorityVote":
-                       results = [WaldEstimatorStats(X_train, Y[train_index], 
-                       IVs_train[:,i], mode=mode, detail=True) for i in 
-                       range(IVs_train.shape[1])]
-                       weights = np.array([(x['beta_x_z']/x['se_y_z'])**2 for x in results])
-                else:
-                    weights = iv_model.get_weights()
-                causality = estimator(X_test, Y[test_index], IVs_test, mode=mode, weights=weights)
-                # update causality_list
-                if isinstance(causality,list):
-                    causality_list.extend(causality)
-                else:
-                    causality_list.append(causality)
-                continue
-            else:
-                causality = estimator(
-                    X_test, 
-                    Y[test_index], 
-                    Z_test, 
-                    mode=mode, 
-                    return_predictive_score=return_predictive_score)
+            causality = estimator(
+                X_test, 
+                Y[test_index], 
+                Z_test, 
+                mode=mode, 
+                return_predictive_score=return_predictive_score)
 
             # update causality_list
             if isinstance(causality,list):
@@ -133,13 +105,11 @@ def ComputeCausality(
     ablation_test=1, 
     Z_true=None, 
     deps=[],
-    chrome_id_list = [],
     n_trial=100,
     num_cores=None, 
     random_seed=None,
-    anchor = None,
-    use_canonical=False,
-    use_forward=False,
+    use_canonical=True,
+    use_forward=True,
     return_predictive_score=False):
 
     if num_cores is None:
@@ -165,8 +135,6 @@ def ComputeCausality(
             Z_true = Z_true, 
             random_seed = random_seed[i], 
             deps = deps,
-            chrome_id_list = chrome_id_list,
-            anchor = anchor,
             use_canonical = use_canonical,
             use_forward=use_forward,
             return_predictive_score=return_predictive_score) 

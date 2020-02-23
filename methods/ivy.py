@@ -16,7 +16,7 @@ class Ivy:
         self.valid_iv = None
         self.w = None
 
-    def train(self,IVs,X=None, deps=[], anchor=None, class_balance=None, use_forward=False, use_canonical=False, **kwargs):
+    def train(self,IVs,X=None, deps=[], anchor=None, class_balance=None, use_forward=True, use_canonical=True, **kwargs):
 
         # determine valid IVs
         if self.valid_iv == None:
@@ -32,6 +32,8 @@ class Ivy:
 
         # assign class balance
         if class_balance is None:
+            # find out class_balance in a heuristic fashion
+            # other class_balance identification methods can also be used
             class_balance = Counter(IVs.flatten())
             class_balance = class_balance[1]/(class_balance[-1]+class_balance[1])
             class_balance = [1-class_balance, class_balance]
@@ -48,8 +50,15 @@ class Ivy:
         M = nx.incidence_matrix(inverse_graph).T.toarray()
         edge_list_M = np.asarray(inverse_graph.edges())
 
+        # make sure deps are in increasing order
+        deps = [[int(x[0]),int(x[1])] for x in deps]
 
-        if self.use_forward and (deps == []):
+        # update M and edge_list_M by removing edges in deps
+        selector = [(list(x) not in deps) for x in edge_list_M]
+        M = M[selector,:]
+        edge_list_M = edge_list_M[selector,:]
+
+        if self.use_forward:
 
             # create q
             exp_q = np.abs(sem[edge_list_M[:,0],edge_list_M[:,1]])
@@ -81,116 +90,9 @@ class Ivy:
 
             self.w = np.exp(l)
 
-        else: # with dependency
-    
-            # did not really use forward algorithm despite specified in the input
-            self.use_forward = False
-
-            # make sure deps are in increasing order
-            deps = [[int(x[0]),int(x[1])] for x in deps]
-
-            # update M and edge_list_M by removing edges in deps
-            selector = [(list(x) not in deps) for x in edge_list_M]
-            M = M[selector,:]
-            edge_list_M = edge_list_M[selector,:]
-
-            # make sure that M matrix is full-rank
-            # find the all-zero column
-            selector_non_zero_column_M = np.sum(M,axis=0)>0
-
-            # compute q
-            # {0,1} encoding of the (inverse) covariance matrix
-            pinv_sem = np.linalg.pinv(np.cov((IVs.T+1)/2))
-            exp_q = pinv_sem[edge_list_M[:,0],edge_list_M[:,1]]
-            q =  np.log(np.abs(exp_q))
-
-            # # determine if the z share the same sign or not
-            # # not completely finished 
-            # sign = np.sign(pinv_sem)
-            # np.fill_diagonal(sign,0)
-            # same_sign = np.vstack(np.where(sign<0)).T
-            # same_sign = same_sign[same_sign[:,0]<same_sign[:,1],:]
-            # same_sign_graph = nx.Graph()
-            # same_sign_graph.add_edges_from(same_sign)
-            # [print(c) for c in nx.connected_components(same_sign_graph)]
-
-            # compute l and w (mu)
-            l,_,_,_ = np.linalg.lstsq(M,q,rcond=None)
-
-            # abs_z
-            abs_z = np.exp(l)
-
-            # did not decide the sign of z
-            # one workaround that can consider is to pick only 
-            # the negative entries of the inverse matrix when estimating
-            # using least square, not sure why though
-            
-            # also, Sigma_O @ z = np.sqrt(c) * Sigma_OS
-            # see if Sigma_OS>0 as a check?
-            z = abs_z
-
         # get the w which is the mean parameter
         # the following are in {0,1} encoding
         self.class_balance = class_balance #[neg, pos]
-        var_cb  = self.class_balance[1] - self.class_balance[1]**2
-        mean_est = np.mean((IVs+1)/2,axis=0).reshape(-1,1)
-        cov_est_obs = np.cov((IVs.T+1)/2)
-
-        if not self.use_forward:
-            c_hat = 1.0 / var_cb * (1 + z.T @ cov_est_obs @ z)
-            Sigma_OS_hat = cov_est_obs @ z / np.sqrt(c_hat)
-
-            # force mu to be non-negative
-            # second moment in {0,1} encoding
-            self.w = (Sigma_OS_hat + self.class_balance[1]*mean_est.T).flatten()
-
-            # map to {-1,1} encoding to represent accuracy (difference)
-            self.w = 4*self.w - 2*mean_est.T - 2*self.class_balance[1] + 1
-            self.w = self.w[0]
-
-        # conditional accuracy
-        mean_est_aug = np.append((mean_est),self.class_balance[1])
-        B = np.array([[1,1,0,0],[1,0,1,0],[1,0,0,1],[1,1,1,1]])
-        self.conditional_accuracy = None
-
-        # P(x=1,z=1) P(x=1,z=-1) P(x=-1,z=1) P(x=-1,z=-1)
-        for i in range(p):
-            b = np.array([mean_est_aug[i],mean_est_aug[p],(self.w[i]+1)/2,1])
-            beta,_,_,_ = np.linalg.lstsq(B,b,rcond=None)
-            if self.conditional_accuracy is None:
-                self.conditional_accuracy = np.array([
-                    beta[3]/self.class_balance[0],
-                    beta[0]/self.class_balance[1]])
-            else:  
-                self.conditional_accuracy = np.vstack([
-                    self.conditional_accuracy, np.array([
-                    beta[3]/self.class_balance[0],
-                    beta[0]/self.class_balance[1]])
-                ])
-
-        # compute auc
-        tn = self.conditional_accuracy[:,0]*self.class_balance[0]
-        tp = self.conditional_accuracy[:,1]*self.class_balance[1]
-        fn = self.class_balance[1]-tp
-        fp = self.class_balance[0]-tn
-        tpr = tp/(tp+fn)
-        fpr = fp/(fp+tn)
-        auc = tpr*fpr/2 + (tpr+1)*(1-fpr)/2
-        self.auc = auc   
-
-        # # pick conditional independent LFs from cliques
-        # # create dependency graph
-        # g=nx.Graph()
-        # g.add_nodes_from(range(len(self.w)))
-        # g.add_edges_from(deps)
-
-        # # pick a representative from a clique
-        # selector = [list(curr)[np.argmax(self.w[list(curr)])] for curr in nx.connected_components(g)]
-        # self.w[list(set(range(len(self.w))).difference(selector))] = -1
-        
-        # # # average accuracy over clique
-        # # for curr in nx.connected_components(g):
-        # #     self.w[list(curr)] = self.w[list(curr)]/len(list(curr))
 
         if self.use_canonical:
 
@@ -273,98 +175,48 @@ class Ivy:
 
         return score, S, L
 
-    def predict_proba(self,IVs, is_ad_hoc=False):
+    def predict_proba(self,IVs,is_ad_hoc=False):
 
         # compute soft label
         IVs = self._convert_iv(IVs)
-        w = self.w
-        conditional_accuracy = self.conditional_accuracy
+        # w = self.w
+        # conditional_accuracy = self.conditional_accuracy
 
         n,p = IVs.shape
 
-        if self.use_forward:
-            # use regular accuracy
-            w = np.clip(np.abs(w),0.05,0.95)
-            W =  (np.log(1+w)-np.log(1-w))
-            
-            Zprob = sigmoid(1/2* IVs @ W)
-            Zprob_median = np.median(Zprob)
+        if self.use_canonical:
+            # use canonical parameters
+            pos_posterior = np.zeros(n)
+            neg_posterior = np.zeros(n)
+            for clique in self.prob_dict:
+                iv_index_in_clique = [x for x in range(len(clique)) if list(clique)[x]!= str(p)]
+                iv_index_in_IVs = np.array(list(clique))[iv_index_in_clique].astype(int)
+                assignment = np.zeros([n,len(clique)]).astype(int)
+                assignment[:,iv_index_in_clique] = IVs[:,iv_index_in_IVs]+1
+                pos_assignment = np.copy(assignment)
+                neg_assignment = np.copy(assignment)
+                pos_assignment[:,list(clique).index(str(p))] = 2
+                neg_assignment[:,list(clique).index(str(p))] = 0
+                del assignment
+                # find the index of the assignment
+                pos_assignment_single_index = multi_index_to_index(pos_assignment)
+                neg_assignment_single_index = multi_index_to_index(neg_assignment)
+                # update positve posterior
+                pos_posterior = pos_posterior + self.prob_dict[clique]["prob"][pos_assignment_single_index]
+                # update negative posterior
+                neg_posterior = neg_posterior + self.prob_dict[clique]["prob"][neg_assignment_single_index]
 
-            Zprob_max = 0.9
-            Zprob_min = 1-Zprob_max
+            Zprob = sigmoid(-(neg_posterior+np.log(self.class_balance_im[0]))+(pos_posterior+np.log(self.class_balance_im[1])))
 
-            if Zprob_median>Zprob_max:
-                Zprob_intercept = (np.log(Zprob_median)-np.log(1-Zprob_median)) - (np.log(Zprob_max)-np.log(1-Zprob_max))
-                Zprob = sigmoid((1/2* IVs @ W)-Zprob_intercept)
-            elif Zprob_median<Zprob_min:
-                Zprob_intercept = (np.log(Zprob_min)-np.log(1-Zprob_min)) - (np.log(Zprob_median)-np.log(1-Zprob_median))
-                Zprob = sigmoid((1/2* IVs @ W) + Zprob_intercept)
         else:
-            # use conditional accuracy
-            conditional_accuracy = np.clip(conditional_accuracy,
-            np.min(np.abs(self.conditional_accuracy)),1)
-
-            IVs_aug = np.hstack([
-                (IVs==-1).astype(int),
-                (IVs==1).astype(int)])
-
-            conditional_accuracy_aug = np.vstack(
-                # P(w_j=-1 \mid z=-1), P(w_j=1 \mid z=-1)
-                [np.hstack([conditional_accuracy[:,0],1-conditional_accuracy[:,0]]),
-                # P(w_j=-1 \mid z=1), P(w_j=1 \mid z=1)
-                np.hstack([1-conditional_accuracy[:,1],conditional_accuracy[:,1]])]).T
-
-            log_Zprob = IVs_aug @ np.log(conditional_accuracy_aug)
-
-            Zprob = sigmoid(log_Zprob[:,1]-log_Zprob[:,0] + 
-                np.log(self.class_balance[1])-np.log(self.class_balance[0]))
-
-            if self.use_canonical:
-                # use canonical parameters
-                pos_posterior = np.zeros(n)
-                neg_posterior = np.zeros(n)
-                for clique in self.prob_dict:
-                    iv_index_in_clique = [x for x in range(len(clique)) if list(clique)[x]!= str(p)]
-                    iv_index_in_IVs = np.array(list(clique))[iv_index_in_clique].astype(int)
-                    assignment = np.zeros([n,len(clique)]).astype(int)
-                    assignment[:,iv_index_in_clique] = IVs[:,iv_index_in_IVs]+1
-                    pos_assignment = np.copy(assignment)
-                    neg_assignment = np.copy(assignment)
-                    pos_assignment[:,list(clique).index(str(p))] = 2
-                    neg_assignment[:,list(clique).index(str(p))] = 0
-                    del assignment
-                    # find the index of the assignment
-                    pos_assignment_single_index = multi_index_to_index(pos_assignment)
-                    neg_assignment_single_index = multi_index_to_index(neg_assignment)
-                    # update positve posterior
-                    pos_posterior = pos_posterior + self.prob_dict[clique]["prob"][pos_assignment_single_index]
-                    # update negative posterior
-                    neg_posterior = neg_posterior + self.prob_dict[clique]["prob"][neg_assignment_single_index]
-
-                Zprob = sigmoid(-(neg_posterior+np.log(self.class_balance_im[0]))+(pos_posterior+np.log(self.class_balance_im[1])))
-
-        if is_ad_hoc:
-            # w = self.auc
-            # Zprob = np.matmul(IVs+1, w)/(IVs.shape[1]*2)
-
-            # the first one underneath is the default criterion
-            Zprob = np.matmul(IVs+1, w+1)/(IVs.shape[1]*2)
-
-            # # use probability as synthesized IV
-            # pass
-
-            # # use log probability as synthesized IV
-            # Zprob = 1/2* IVs @ (np.log(1+w) - np.log(1-w))/IVs.shape[1]
-            
-            # exp accuracy difference weight
-            # Zprob = np.matmul(IVs, np.exp(w))/(IVs.shape[1]*2)
+            raise NotImplementedError("set use_cannonical=True in training!")
 
         return Zprob
 
     def predict(self, IVs, b=0.5):
         
         Zprob = self.predict_proba(IVs)
-        Z = np.where(Zprob > np.median(Zprob), POSITIVE, NEGATIVE)
+        Z = np.where(Zprob > b, POSITIVE, NEGATIVE)
         return Z
 
     def _convert_iv(self,IVs):
