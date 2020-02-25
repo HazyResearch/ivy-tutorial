@@ -2,8 +2,8 @@
 
 This tutorial introduces the instrumental variable synthesis (Ivy) framework proposed in 
 
-%[Ivy: Instrumental Variable Synthesis for Causal Inference](https://arxiv.org/abs/1803.01422) 
-(AISTATS 2020)
+<!-- [Ivy: Instrumental Variable Synthesis for Causal Inference](https://arxiv.org/abs/1803.01422) 
+(AISTATS 2020) -->
 
 Ivy: Instrumental Variable Synthesis for Causal Inference (AISTATS 2020)
 
