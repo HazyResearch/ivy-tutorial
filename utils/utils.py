@@ -61,7 +61,6 @@ class IsingModel:
         
         return mom_matrix
 
-# manually comment out a version of pgmpy in order to get rid of the multiple progress bar    
 def mean_to_canonical(deps, mean_parameter, theta=None, alpha=0.1, maxiter=20, accelerated=True, verbose=False):
     # initialization
     p = mean_parameter.shape[0]
