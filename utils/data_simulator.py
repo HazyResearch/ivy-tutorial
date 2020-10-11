@@ -23,7 +23,8 @@ class DataSimulator:
             p,cond_indp,d,include_unary_factor,seed=seed)
 
         # causal model
-        self.causal_mdl = BayesNetDataSimulator(causal_effect=False,q=q)
+        self.causal_mdl = BayesNetDataSimulator(
+        	causal_effect=causal_effect,valid_z=valid_z,q=q)
 
         self.p = p
         self.q = q
